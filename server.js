@@ -110,21 +110,35 @@ const io = new Server(server, {
   },
 });
 
+const rooms = {};
+
 io.on("connection", (socket) => {
-  socket.on("join-room", (roomId, userId) => {
+  socket.on("join-room", ({ roomId, userId }) => {
     socket.join(roomId);
 
-    // Notify others in the room that a new user joined
+    if (!rooms[roomId]) rooms[roomId] = [];
+    rooms[roomId].push({ socketId: socket.id, userId });
+
+    // Send current users in the room to the new user
+    const otherUsers = rooms[roomId].filter((u) => u.socketId !== socket.id);
+    socket.emit(
+      "all-users",
+      otherUsers.map((u) => u.userId)
+    );
+
+    // Notify existing users about the new user
     socket.to(roomId).emit("user-joined", userId);
 
-    // Relay signal data between users
     socket.on("signal", ({ to, from, data }) => {
       io.to(to).emit("signal", { from, data });
     });
 
-    // Notify others when a user leaves
     socket.on("disconnect", () => {
-      socket.to(roomId).emit("user-left", userId);
+      const user = rooms[roomId]?.find((u) => u.socketId === socket.id);
+      if (user) {
+        rooms[roomId] = rooms[roomId].filter((u) => u.socketId !== socket.id);
+        socket.to(roomId).emit("user-left", user.userId);
+      }
     });
   });
 });
