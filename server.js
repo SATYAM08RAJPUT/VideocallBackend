@@ -93,7 +93,6 @@
 // server.listen(PORT, () =>
 //   console.log(`Signaling server running on port ${PORT}`)
 // );
-
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -119,16 +118,23 @@ io.on("connection", (socket) => {
     if (!rooms[roomId]) rooms[roomId] = [];
     rooms[roomId].push({ socketId: socket.id, userId });
 
-    // Send current users in the room to the new user
+    // ✅ Send both userId and socketId to the new user
     const otherUsers = rooms[roomId].filter((u) => u.socketId !== socket.id);
     socket.emit(
       "all-users",
-      otherUsers.map((u) => u.userId)
+      otherUsers.map((u) => ({
+        userId: u.userId,
+        socketId: u.socketId,
+      }))
     );
 
-    // Notify existing users about the new user
-    socket.to(roomId).emit("user-joined", userId);
+    // ✅ Notify existing users about the new user (with socketId too if needed)
+    socket.to(roomId).emit("user-joined", {
+      userId,
+      socketId: socket.id,
+    });
 
+    // ✅ Forward signals (SDP/ICE) between peers
     socket.on("signal", ({ to, from, data }) => {
       io.to(to).emit("signal", { from, data });
     });
